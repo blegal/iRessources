@@ -15,6 +15,56 @@ enum SidebarPage: Hashable {
         case .memory, .network: []
         }
     }
+
+    /// Sidebar order, used for keyboard navigation.
+    @MainActor
+    static func order(in monitor: SystemMonitor) -> [SidebarPage] {
+        var pages: [SidebarPage] = [.apps, .processes, .cpu, .memory]
+        pages += monitor.gpus.map { .gpu($0.id) }
+        if monitor.hasPowerMetrics { pages.append(.npu) }
+        pages += monitor.drives.map { .drive($0.id) }
+        pages += monitor.networks.map { .network($0.bsdName) }
+        if monitor.battery != nil { pages.append(.battery) }
+        return pages
+    }
+}
+
+struct SidebarSelectionKey: FocusedValueKey {
+    typealias Value = Binding<SidebarPage>
+}
+
+extension FocusedValues {
+    var sidebarSelection: Binding<SidebarPage>? {
+        get { self[SidebarSelectionKey.self] }
+        set { self[SidebarSelectionKey.self] = newValue }
+    }
+}
+
+/// View menu items to move through the sidebar from anywhere in the window,
+/// including while a table has keyboard focus.
+struct SidebarCommands: Commands {
+    var monitor: SystemMonitor
+    @FocusedBinding(\.sidebarSelection) private var selection
+
+    var body: some Commands {
+        CommandGroup(after: .sidebar) {
+            Button("Previous Resource") { move(by: -1) }
+                .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+                .disabled(selection == nil)
+            Button("Next Resource") { move(by: 1) }
+                .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+                .disabled(selection == nil)
+            Divider()
+        }
+    }
+
+    @MainActor
+    private func move(by offset: Int) {
+        guard let current = selection else { return }
+        let pages = SidebarPage.order(in: monitor)
+        guard let index = pages.firstIndex(of: current) else { return }
+        selection = pages[min(max(index + offset, 0), pages.count - 1)]
+    }
 }
 
 struct ContentView: View {
@@ -32,6 +82,7 @@ struct ContentView: View {
                 .transition(.opacity)
         }
         .animation(motion.animation(.easeInOut(duration: 0.2)), value: selection)
+        .focusedSceneValue(\.sidebarSelection, $selection)
         .onChange(of: selection, initial: true) { _, page in
             monitor.demand = page.demand
         }
@@ -76,12 +127,26 @@ struct Sidebar: View {
     @Namespace private var highlight
 
     var body: some View {
-        ScrollView {
+        // Apps and Processes stay fixed above the scrolling device list. As the
+        // first rows of a ScrollView they sat in the band under the toolbar
+        // where macOS 26 keeps clicks for the scroll view, so they were hard to select.
+        VStack(spacing: 0) {
             VStack(spacing: 2) {
                 item(.apps, "Apps", "macwindow")
                 item(.processes, "Processes", "gearshape.2")
-                    .padding(.bottom, 6)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 6)
+            Divider().padding(.horizontal, 18).opacity(0.6)
+            devices
+        }
+        .background(theme.sidebarBackground)
+    }
 
+    private var devices: some View {
+        ScrollView {
+            VStack(spacing: 2) {
                 item(.cpu, "Processor", "cpu", value: Format.percent(monitor.cpu.total)) {
                     GraphView(monitor.cpuHistory.values, color: theme.cpu)
                 }
@@ -124,28 +189,6 @@ struct Sidebar: View {
             .padding(.vertical, 8)
         }
         .scrollIndicators(.never)
-        .background(theme.sidebarBackground)
-        .focusable()
-        .focusEffectDisabled()
-        .onKeyPress(.upArrow) { move(by: -1) }
-        .onKeyPress(.downArrow) { move(by: 1) }
-    }
-
-    private var order: [SidebarPage] {
-        var pages: [SidebarPage] = [.apps, .processes, .cpu, .memory]
-        pages += monitor.gpus.map { .gpu($0.id) }
-        if monitor.hasPowerMetrics { pages.append(.npu) }
-        pages += monitor.drives.map { .drive($0.id) }
-        pages += monitor.networks.map { .network($0.bsdName) }
-        if monitor.battery != nil { pages.append(.battery) }
-        return pages
-    }
-
-    private func move(by offset: Int) -> KeyPress.Result {
-        let pages = order
-        guard let index = pages.firstIndex(of: selection) else { return .ignored }
-        selection = pages[min(max(index + offset, 0), pages.count - 1)]
-        return .handled
     }
 
     private func item(_ page: SidebarPage, _ title: String, _ symbol: String, value: String? = nil) -> some View {
@@ -177,7 +220,8 @@ struct Sidebar: View {
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .background {
                 if isSelected {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -206,3 +250,4 @@ struct Sidebar: View {
         }
     }
 }
+

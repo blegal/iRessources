@@ -30,6 +30,7 @@ struct IRessourcesApp: App {
                 .background(WindowVisibilityObserver { monitor.isVisible = $0 })
         }
         .commands {
+            SidebarCommands(monitor: monitor)
             CommandGroup(after: .toolbar) {
                 Button("Refresh Now") { monitor.refreshNow() }
                     .keyboardShortcut("r")
