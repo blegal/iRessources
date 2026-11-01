@@ -220,6 +220,8 @@ struct ToggleRow: View {
 struct Page<Content: View>: View {
     var title: String
     var subtitle: String?
+    /// Width of the centred column; pages with grids can go wider.
+    var maxWidth: CGFloat = 680
     @ViewBuilder var content: Content
     @Environment(\.theme) private var theme
     @Environment(\.motion) private var motion
@@ -232,7 +234,7 @@ struct Page<Content: View>: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 22)
-            .frame(maxWidth: 680)
+            .frame(maxWidth: maxWidth)
             .frame(maxWidth: .infinity)
             .opacity(appeared || !motion.enabled ? 1 : 0)
             .offset(y: appeared || !motion.enabled ? 0 : 10)

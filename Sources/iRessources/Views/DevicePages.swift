@@ -17,7 +17,8 @@ struct CPUPage: View {
     var body: some View {
         let info = monitor.cpuInfo
         let cpu = monitor.cpu
-        Page(title: info.model, subtitle: "Processor") {
+        // With the per-core grid shown, the page grows with the window so more cores fit per row.
+        Page(title: info.model, subtitle: "Processor", maxWidth: showCores ? 1600 : 680) {
             PageSection(title: "Options") {
                 BoxedList {
                     ToggleRow(title: "Show usage of logical CPUs", isOn: $showCores)
@@ -26,7 +27,7 @@ struct CPUPage: View {
 
             PageSection(title: "Usage") {
                 if showCores {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 10)], spacing: 10) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 260), spacing: 10)], spacing: 10) {
                         ForEach(monitor.coreHistories.indices, id: \.self) { index in
                             BoxedList {
                                 VStack(alignment: .leading, spacing: 6) {

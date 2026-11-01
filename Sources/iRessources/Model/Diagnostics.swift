@@ -81,6 +81,10 @@ extension Diagnostics {
     static func snapshotPages(_ pages: [(String, SidebarPage)], select: (SidebarPage) -> Void) async {
         guard let directory = snapshotDirectory else { return }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let width = ProcessInfo.processInfo.environment["IRESSOURCES_SNAPSHOT_WIDTH"].flatMap(Double.init),
+           let window = NSApp.windows.first(where: { $0.isVisible }) {
+            window.setContentSize(NSSize(width: width, height: 700))
+        }
         for (name, page) in pages {
             select(page)
             try? await Task.sleep(for: .seconds(5))
