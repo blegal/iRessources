@@ -249,10 +249,40 @@ struct ProcessDetailView: View {
 struct AppsPage: View {
     @Environment(SystemMonitor.self) private var monitor
     @Environment(\.theme) private var theme
-    @State private var sortOrder = [KeyPathComparator(\AppSample.memory, order: .reverse)]
+    @Environment(\.motion) private var motion
+    @State private var sortOrder: [KeyPathComparator<AppSample>]
     @State private var selection = Set<pid_t>()
     @State private var search = ""
     @State private var confirmForceQuit: [pid_t]?
+
+    init() {
+        // Sorted by name by default; the last column and direction chosen are remembered.
+        let defaults = UserDefaults.standard
+        let ascending = defaults.object(forKey: "appsSortAscending") as? Bool ?? true
+        _sortOrder = State(initialValue: [Self.comparator(defaults.string(forKey: "appsSortColumn") ?? "name",
+                                                          order: ascending ? .forward : .reverse)])
+    }
+
+    private static let columns: [(String, PartialKeyPath<AppSample>)] = [
+        ("name", \.name), ("memory", \.memory), ("cpu", \.cpu), ("read", \.diskReadPerSecond),
+        ("write", \.diskWritePerSecond), ("gpu", \.gpu),
+    ]
+
+    private static func comparator(_ column: String, order: SortOrder) -> KeyPathComparator<AppSample> {
+        switch column {
+        case "memory": KeyPathComparator(\.memory, order: order)
+        case "cpu": KeyPathComparator(\.cpu, order: order)
+        case "read": KeyPathComparator(\.diskReadPerSecond, order: order)
+        case "write": KeyPathComparator(\.diskWritePerSecond, order: order)
+        case "gpu": KeyPathComparator(\.gpu, order: order)
+        default: KeyPathComparator(\.name, comparator: .localizedStandard, order: order)
+        }
+    }
+
+    private var selectedApp: AppSample? {
+        guard selection.count == 1, let pid = selection.first else { return nil }
+        return monitor.apps.first { $0.pid == pid }
+    }
 
     private var rows: [AppSample] {
         monitor.apps
@@ -262,7 +292,7 @@ struct AppsPage: View {
 
     var body: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("App", value: \.name) { app in
+            TableColumn("App", value: \.name, comparator: .localizedStandard) { app in
                 HStack(spacing: 10) {
                     ProcessIcon(executablePath: nil, bundlePath: app.bundlePath, size: 28)
                     Text(app.name).lineLimit(1)
@@ -299,17 +329,28 @@ struct AppsPage: View {
         .background(theme.windowBackground ?? Color(nsColor: .windowBackgroundColor))
         .searchable(text: $search, placement: .toolbar, prompt: "Search apps")
         .centeredTitle("Apps", subtitle: "\(rows.count) running apps")
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            ActionBar {
-                SplitDestructiveButton(title: "End App", enabled: !selection.isEmpty) {
-                    quit(Array(selection))
-                } menu: {
-                    Button("Force Quit App") { confirmForceQuit = Array(selection) }
-                    Divider()
-                    Button("Bring to Front") { selection.forEach { NSRunningApplication(processIdentifier: $0)?.activate() } }
-                    Button("Hide App") { selection.forEach { NSRunningApplication(processIdentifier: $0)?.hide() } }
-                }
+        .onChange(of: monitor.apps.count) {
+            // Snapshot mode: preselect an app so the drawer can be checked.
+            if selection.isEmpty, let name = ProcessInfo.processInfo.environment["IRESSOURCES_SELECT_APP"],
+               let app = monitor.apps.first(where: { $0.name == name }) {
+                selection = [app.pid]
             }
+        }
+        .onChange(of: sortOrder) { _, order in
+            guard let first = order.first,
+                  let column = Self.columns.first(where: { $0.1 == first.keyPath })?.0 else { return }
+            UserDefaults.standard.set(column, forKey: "appsSortColumn")
+            UserDefaults.standard.set(first.order == .forward, forKey: "appsSortAscending")
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                if let app = selectedApp {
+                    AppDetailDrawer(app: app) { selection = [] }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                actionBar
+            }
+            .animation(motion.animation(.smooth(duration: 0.28)), value: selectedApp?.pid)
         }
         .confirmationDialog("Force quit the selected apps?",
                             isPresented: Binding(get: { confirmForceQuit != nil }, set: { if !$0 { confirmForceQuit = nil } }),
@@ -320,6 +361,19 @@ struct AppsPage: View {
             }
         } message: { _ in
             Text("Unsaved changes will be lost.")
+        }
+    }
+
+    private var actionBar: some View {
+        ActionBar {
+            SplitDestructiveButton(title: "End App", enabled: !selection.isEmpty) {
+                quit(Array(selection))
+            } menu: {
+                Button("Force Quit App") { confirmForceQuit = Array(selection) }
+                Divider()
+                Button("Bring to Front") { selection.forEach { NSRunningApplication(processIdentifier: $0)?.activate() } }
+                Button("Hide App") { selection.forEach { NSRunningApplication(processIdentifier: $0)?.hide() } }
+            }
         }
     }
 

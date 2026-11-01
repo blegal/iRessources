@@ -30,6 +30,7 @@ struct AppSample: Identifiable, Hashable {
     var diskReadPerSecond: Double
     var diskWritePerSecond: Double
     var gpu: Double
+    var threads: Int
     var processIDs: [pid_t]
     var launchDate: Date?
 }
@@ -274,6 +275,7 @@ final class SystemMonitor {
                 diskReadPerSecond: members.reduce(0) { $0 + $1.diskReadPerSecond },
                 diskWritePerSecond: members.reduce(0) { $0 + $1.diskWritePerSecond },
                 gpu: min(members.reduce(0) { $0 + $1.gpu }, 1),
+                threads: members.reduce(0) { $0 + $1.threads },
                 processIDs: members.map(\.pid),
                 launchDate: app.launchDate
             )

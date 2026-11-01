@@ -17,6 +17,8 @@ enum Diagnostics {
         print("         levels: \(info.performanceLevels.map { "\($0.name)×\($0.logicalCPUs)" }.joined(separator: ", "))")
         let c = cpu.sample()
         print("         total \(Format.percent(c.total)) user \(Format.percent(c.user)) system \(Format.percent(c.system))")
+        print("         per core: " + zip(info.coreClusters + Array(repeating: "?", count: max(c.perCore.count - info.coreClusters.count, 0)), c.perCore)
+            .map { "\($0.0)\(Int($0.1 * 100))" }.joined(separator: " "))
 
         let p = power.sample()
         print("Power    available=\(power.isAvailable) CPU \(Format.watts(p.cpuWatts)) GPU \(Format.watts(p.gpuWatts)) "
