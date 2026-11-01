@@ -99,3 +99,7 @@ Pour le développement : `swift run`. Pour voir ce qu'exposent les collecteurs s
 GPL-3.0-or-later, comme Resources. Voir [LICENSE](LICENSE).
 
 Resources est © nokyan et ses contributeurs, distribué sous GPL-3.0-or-later.
+
+## Développement
+
+iRessources a été développé avec l'aide de [Claude Code](https://claude.com/claude-code), l'assistant de programmation d'Anthropic : écriture du code Swift, exploration des interfaces système de macOS, mesures de performance et mise au point de l'interface.
