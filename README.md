@@ -4,6 +4,28 @@ Portage natif macOS de [Resources](https://github.com/nokyan/resources), le moni
 
 L'interface reprend l'esprit de Resources : barre latérale avec un graphe par périphérique, pages « Usage » / « Properties » en listes encadrées, tableaux Apps et Processus avec barre d'action en bas.
 
+## Remerciements
+
+iRessources n'existerait pas sans **[Resources](https://github.com/nokyan/resources)**, l'excellent moniteur système pour GNOME créé par **[nokyan](https://github.com/nokyan)**. Le design, l'organisation des pages et une bonne partie des idées viennent de là. Un grand merci à son auteur, qui a accepté avec beaucoup de gentillesse que son travail serve de base à ce portage.
+
+Si vous êtes sous Linux, c'est Resources qu'il vous faut : [sur Flathub](https://flathub.org/apps/net.nokyan.Resources) ou [sur GitHub](https://github.com/nokyan/resources).
+
+## D'une app GNOME à une app macOS
+
+iRessources est une réécriture, pas une recompilation : Resources est écrit en Rust avec GTK 4 / libadwaita et lit `/proc`, `/sys` et les pilotes Linux, rien de tout cela n'existe sur macOS. Chaque collecteur a donc été réécrit sur les interfaces de Darwin, et l'interface refaite en SwiftUI.
+
+Ce qui a été **transposé** :
+
+- Les sources de données : `/proc` → Mach et `libproc` ; hwmon → capteurs HID ; RAPL, sysfs et NVML → IOReport et `IOAccelerator` ; `/sys/block` → `IOBlockStorageDriver` ; `/sys/class/net` → `SystemConfiguration` et CoreWLAN ; `/sys/class/power_supply` → `AppleSmartBattery`.
+- Les « apps » : là où Resources s'appuie sur les cgroups et les fichiers `.desktop`, iRessources regroupe les processus par « processus responsable » (comme le Moniteur d'activité), ce qui rattache aussi les helpers XPC à leur application.
+- Les spécificités d'Apple silicon : types de cœurs (Super / Performance / Efficacité), fréquence par cluster, Neural Engine, mémoire unifiée.
+
+Ce qui a été **ajouté ou adapté** :
+
+- Tiroir de détails sous la liste des apps, avec réglage de la priorité (*nice*) et un **mode arrière-plan** qui cantonne l'app aux cœurs les plus économes et ralentit ses E/S.
+- Thèmes (dont *Adwaita*, qui reprend les couleurs de Resources), animations désactivables, raccourcis clavier macOS.
+- Une attention particulière à la sobriété : collecte à la demande selon la page affichée, ralentissement quand la fenêtre est masquée (voir [Sobriété](#sobriété)).
+
 ## Fonctionnalités
 
 | Page | Contenu |
@@ -75,3 +97,5 @@ Pour le développement : `swift run`. Pour voir ce qu'exposent les collecteurs s
 ## Licence
 
 GPL-3.0-or-later, comme Resources. Voir [LICENSE](LICENSE).
+
+Resources est © nokyan et ses contributeurs, distribué sous GPL-3.0-or-later.
