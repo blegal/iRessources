@@ -89,7 +89,9 @@ struct ContentView: View {
         .task {
             guard Diagnostics.snapshotDirectory != nil, !Diagnostics.snapshotStarted else { return }
             Diagnostics.snapshotStarted = true
-            try? await Task.sleep(for: .seconds(3))
+            // A longer delay fills the graph histories, for README screenshots.
+            let delay = ProcessInfo.processInfo.environment["IRESSOURCES_SNAPSHOT_DELAY"].flatMap(Double.init) ?? 3
+            try? await Task.sleep(for: .seconds(delay))
             var pages: [(String, SidebarPage)] = [("apps", .apps), ("processes", .processes), ("cpu", .cpu), ("memory", .memory)]
             pages += monitor.gpus.map { ("gpu", SidebarPage.gpu($0.id)) }
             if monitor.hasPowerMetrics { pages.append(("npu", .npu)) }

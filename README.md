@@ -1,105 +1,129 @@
 # iRessources
 
-Portage natif macOS de [Resources](https://github.com/nokyan/resources), le moniteur système de GNOME, écrit en Swift / SwiftUI et s'appuyant directement sur les API de Darwin (Mach, IOKit, IOReport, libproc, SystemConfiguration, CoreWLAN).
+**English** · [Français](README.fr.md)
 
-L'interface reprend l'esprit de Resources : barre latérale avec un graphe par périphérique, pages « Usage » / « Properties » en listes encadrées, tableaux Apps et Processus avec barre d'action en bas.
+A native macOS port of [Resources](https://github.com/nokyan/resources), the GNOME system monitor, written in Swift / SwiftUI on top of Darwin's own APIs (Mach, IOKit, IOReport, libproc, SystemConfiguration, CoreWLAN).
 
-## Remerciements
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/cpu-dark.png">
+  <img alt="iRessources Processor page: one graph per core, Performance and Super cores" src="docs/screenshots/cpu-light.png">
+</picture>
 
-iRessources n'existerait pas sans **[Resources](https://github.com/nokyan/resources)**, l'excellent moniteur système pour GNOME créé par **[nokyan](https://github.com/nokyan)**. Le design, l'organisation des pages et une bonne partie des idées viennent de là. Un grand merci à son auteur, qui a accepté avec beaucoup de gentillesse que son travail serve de base à ce portage.
+The interface follows Resources closely: a sidebar with a live graph for every device, "Usage" / "Properties" pages laid out as boxed lists, and Apps and Processes tables with an action bar at the bottom.
 
-Si vous êtes sous Linux, c'est Resources qu'il vous faut : [sur Flathub](https://flathub.org/apps/net.nokyan.Resources) ou [sur GitHub](https://github.com/nokyan/resources).
-
-## D'une app GNOME à une app macOS
-
-iRessources est une réécriture, pas une recompilation : Resources est écrit en Rust avec GTK 4 / libadwaita et lit `/proc`, `/sys` et les pilotes Linux, rien de tout cela n'existe sur macOS. Chaque collecteur a donc été réécrit sur les interfaces de Darwin, et l'interface refaite en SwiftUI.
-
-Ce qui a été **transposé** :
-
-- Les sources de données : `/proc` → Mach et `libproc` ; hwmon → capteurs HID ; RAPL, sysfs et NVML → IOReport et `IOAccelerator` ; `/sys/block` → `IOBlockStorageDriver` ; `/sys/class/net` → `SystemConfiguration` et CoreWLAN ; `/sys/class/power_supply` → `AppleSmartBattery`.
-- Les « apps » : là où Resources s'appuie sur les cgroups et les fichiers `.desktop`, iRessources regroupe les processus par « processus responsable » (comme le Moniteur d'activité), ce qui rattache aussi les helpers XPC à leur application.
-- Les spécificités d'Apple silicon : types de cœurs (Super / Performance / Efficacité), fréquence par cluster, Neural Engine, mémoire unifiée.
-
-Ce qui a été **ajouté ou adapté** :
-
-- Tiroir de détails sous la liste des apps, avec réglage de la priorité (*nice*) et un **mode arrière-plan** qui cantonne l'app aux cœurs les plus économes et ralentit ses E/S.
-- Thèmes (dont *Adwaita*, qui reprend les couleurs de Resources), animations désactivables, raccourcis clavier macOS.
-- Une attention particulière à la sobriété : collecte à la demande selon la page affichée, ralentissement quand la fenêtre est masquée (voir [Sobriété](#sobriété)).
-
-## Fonctionnalités
-
-| Page | Contenu |
+| | |
 | --- | --- |
-| **Apps** | Applications ouvertes, regroupant tous leurs processus (y compris les helpers XPC, via le « processus responsable » comme dans le Moniteur d'activité). Mémoire, processeur, lecture/écriture disque, GPU. Quitter, forcer à quitter, masquer. |
-| **Processes** | Tous les processus : PID, utilisateur, mémoire (empreinte physique), processeur, threads, E/S disque, GPU par processus. Terminer, tuer, suspendre, reprendre ; panneau de détails (ligne de commande, parent, temps CPU…). |
-| **Processor** | Usage total et par cœur logique, type de cœur (Super/Performance/Efficacité), fréquence et activité par cluster, puissance (si exposée), cache, charge, température SoC, état thermique. |
-| **Memory** | Utilisée / totale, swap, répartition (apps, câblée, compressée, cache), pression mémoire. |
-| **GPU** | Usage (renderer/tiler), mémoire, fréquence et puissance (Apple silicon), nombre de cœurs. |
-| **Neural Engine** | Puissance consommée par l'ANE (macOS ne publie pas de pourcentage d'utilisation). |
-| **Drives** | Activité, débits lecture/écriture, volumes montés, interface, température NAND. |
-| **Network** | Débits reçus/envoyés, adresses, Wi-Fi (signal, canal, norme, débit du lien). |
-| **Battery** | Charge, puissance, santé, cycles, capacités, tension, température, adaptateur secteur. |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/drive-dark.png"><img alt="Drive page" src="docs/screenshots/drive-light.png"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/memory-dark.png"><img alt="Memory page" src="docs/screenshots/memory-light.png"></picture> |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/gpu-dark.png"><img alt="GPU page" src="docs/screenshots/gpu-light.png"></picture> | <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/battery-dark.png"><img alt="Battery page" src="docs/screenshots/battery-light.png"></picture> |
 
-Quand la fenêtre est masquée, l'app rafraîchit au plus toutes les 5 s et coupe les collecteurs coûteux.
+Screenshots follow the light or dark theme of your GitHub account.
 
-## Thèmes et animations
+## Acknowledgements
 
-*Réglages › Appearance* propose les thèmes **Adwaita** (couleurs de Resources), **macOS**, **Pastel**, **Nord**, **Dracula**, **Solarized** et **Graphite**, ainsi que le mode clair, sombre ou automatique.
+iRessources would not exist without **[Resources](https://github.com/nokyan/resources)**, the excellent GNOME system monitor created by **[nokyan](https://github.com/nokyan)**. The design, the page layout and many of the ideas come from there. Many thanks to its author, who very kindly agreed to let this port build on their work.
 
-Deux niveaux d'animation, désactivables indépendamment :
+If you are on Linux, Resources is what you want: [on Flathub](https://flathub.org/apps/net.nokyan.Resources) or [on GitHub](https://github.com/nokyan/resources).
 
-- **Animations** (activé par défaut) : transitions de pages, surbrillance de la barre latérale, apparition du contenu. Coût quasi nul.
-- **Animate live data** (désactivé par défaut) : défilement continu des graphes et chiffres qui roulent. Coûteux en CPU (voir ci-dessous).
+## From a GNOME app to a macOS app
 
-Les deux respectent le réglage système *Accessibilité › Réduire les animations*.
+iRessources is a rewrite, not a recompile: Resources is written in Rust with GTK 4 / libadwaita and reads `/proc`, `/sys` and Linux drivers, none of which exist on macOS. Every collector was rewritten on Darwin interfaces, and the interface rebuilt in SwiftUI.
 
-## Sobriété
+What was **carried over**:
 
-Mesures sur un MacBook Pro M5 Max, macOS 27, intervalle de 2 s, page Apps affichée (la plus coûteuse, avec ~1 150 processus) :
+- Data sources: `/proc` → Mach and `libproc`; hwmon → HID sensors; RAPL, sysfs and NVML → IOReport and `IOAccelerator`; `/sys/block` → `IOBlockStorageDriver`; `/sys/class/net` → `SystemConfiguration` and CoreWLAN; `/sys/class/power_supply` → `AppleSmartBattery`.
+- Apps: where Resources relies on cgroups and `.desktop` files, iRessources groups processes by their "responsible process" (as Activity Monitor does), which also ties XPC helpers to their app.
+- Apple silicon specifics: core types (Super / Performance / Efficiency), per-cluster frequency, Neural Engine, unified memory.
 
-| Configuration | CPU (un cœur) | Mémoire |
+What was **added or adapted**:
+
+- A details drawer under the Apps list, with a priority (*nice*) slider and a **background mode** that keeps the app on the most power-efficient cores and throttles its I/O.
+- Themes (including *Adwaita*, with Resources' colours), animations that can be turned off, macOS keyboard shortcuts.
+- Close attention to frugality: data is collected on demand for the page on screen, and less often while the window is hidden (see [Frugality](#frugality)).
+
+## Take control of your apps
+
+Select an app to open a drawer under the list: where it lives on disk, what it uses right now, a **priority (*nice*) slider** applied to all its processes, and a **background mode** that keeps it on the most power-efficient cores and throttles its disk and network access. Handy for a long build or an export you don't want slowing everything else down.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apps-dark.png"><img alt="Apps page with the details drawer of Safari: path, usage, priority slider and background mode" src="docs/screenshots/apps-light.png"></picture>
+
+## Features
+
+| Page | Contents |
+| --- | --- |
+| **Apps** | Open applications with all their processes (XPC helpers included, through the "responsible process" as in Activity Monitor). Memory, processor, disk read/write, GPU. Quit, force quit, hide. |
+| **Processes** | Every process: PID, user, memory (physical footprint), processor, threads, disk I/O, per-process GPU. End, kill, suspend, resume; details panel (command line, parent, CPU time…). |
+| **Processor** | Total and per logical core usage, core type (Super/Performance/Efficiency), frequency and activity per cluster, power (when exposed), cache, load, SoC temperature, thermal state. |
+| **Memory** | Used / total, swap, breakdown (apps, wired, compressed, cache), memory pressure. |
+| **GPU** | Usage (renderer/tiler), memory, frequency and power (Apple silicon), core count. |
+| **Neural Engine** | ANE power draw (macOS does not publish a utilisation percentage). |
+| **Drives** | Activity, read/write throughput, mounted volumes, interface, NAND temperature. |
+| **Network** | Received/sent throughput, addresses, Wi-Fi (signal, channel, standard, link rate). |
+| **Battery** | Charge, power, health, cycles, capacities, voltage, temperature, power adapter. |
+
+While the window is hidden, the app refreshes at most every 5 s and turns off the expensive collectors.
+
+## Themes and animations
+
+*Settings › Appearance* offers the **Adwaita** (Resources' colours), **macOS**, **Pastel**, **Nord**, **Dracula**, **Solarized** and **Graphite** themes, plus light, dark or automatic mode.
+
+| Adwaita | Dracula | Nord |
 | --- | --- | --- |
-| Animations d'interface (défaut) | ~2,5 % | ~56 Mo |
-| Sans animations | ~2,3 % | ~56 Mo |
-| Données animées en direct | ~40 % | — |
+| <img alt="Adwaita theme" src="docs/screenshots/theme-adwaita.png"> | <img alt="Dracula theme" src="docs/screenshots/theme-dracula.png"> | <img alt="Nord theme" src="docs/screenshots/theme-nord.png"> |
 
-Les points qui comptent :
+Two levels of animation, each of which can be turned off:
 
-- **Collecte à la demande** : la liste des processus, IOReport (puissance/fréquences) et les capteurs de température ne tournent que si la page affichée en a besoin.
-- Un seul appel `proc_pidinfo(PROC_PIDTASKALLINFO)` par processus ; caches pour les chemins, les « processus responsables » et les noms d'utilisateur.
-- La liste des applications n'est relue qu'au lancement ou à la fermeture d'une app (chaque propriété de `NSRunningApplication` peut déclencher un appel IPC à LaunchServices).
-- Requêtes Wi-Fi et volumes mis en cache (respectivement 10 s et 15 s).
-- Pas de `MTLDevice` : en créer un réserve plus de 100 Mo de mémoire GPU.
-- Graphes dessinés avec des `Shape` (aucune vue par point), historique limité à 60 échantillons.
+- **Animations** (on by default): page transitions, sidebar highlight, content appearing. Practically free.
+- **Animate live data** (off by default): continuously scrolling graphs and rolling numbers. Expensive in CPU (see below).
 
-## Compilation
+Both respect the system setting *Accessibility › Reduce motion*.
 
-Nécessite Xcode 16 ou plus récent et macOS 15+.
+## Frugality
+
+Measured on a MacBook Pro M5 Max, macOS 27, 2 s interval, Apps page on screen (the most expensive one, with ~1,150 processes):
+
+| Configuration | CPU (one core) | Memory |
+| --- | --- | --- |
+| Interface animations (default) | ~2.5 % | ~56 MB |
+| No animations | ~2.3 % | ~56 MB |
+| Animated live data | ~40 % | — |
+
+What matters:
+
+- **On-demand collection**: the process list, IOReport (power/frequencies) and temperature sensors only run when the page on screen needs them.
+- A single `proc_pidinfo(PROC_PIDTASKALLINFO)` call per process; caches for paths, "responsible processes" and user names.
+- The application list is only re-read when an app launches or quits (every `NSRunningApplication` property can trigger an IPC call to LaunchServices).
+- Wi-Fi and volume queries are cached (10 s and 15 s respectively).
+- No `MTLDevice`: creating one reserves more than 100 MB of GPU memory.
+- Graphs are drawn with `Shape`s (no view per point), with history limited to 60 samples.
+
+## Building
+
+Requires Xcode 16 or later and macOS 15+.
 
 ```sh
-scripts/build-app.sh          # produit build/iRessources.app (signature ad hoc)
+scripts/build-app.sh          # builds build/iRessources.app (ad hoc signature)
 open build/iRessources.app
 ```
 
-Pour le développement : `swift run`. Pour voir ce qu'exposent les collecteurs sur une machine donnée, sans interface :
+For development: `swift run`. To see what the collectors expose on a given machine, without the interface:
 
 ```sh
 .build/debug/iRessources --dump
 ```
 
-## Limites connues
+## Known limitations
 
-- Sans privilèges root, macOS refuse les statistiques détaillées (CPU, E/S) des processus d'autres utilisateurs : elles apparaissent en « — ».
-- Sur certaines puces, la consommation CPU et ANE n'est pas transmise aux processus non privilégiés ; l'app l'indique au lieu d'afficher 0 W.
-- Les fréquences sont déduites des tables DVFS du gestionnaire d'alimentation, dont la disposition change selon la génération de SoC ; elles peuvent être approximatives.
-- IOReport, les capteurs HID et `responsibility_get_pid_responsible_for_pid` sont des interfaces système non documentées (les mêmes que `powermetrics` ou le Moniteur d'activité) : l'app ne peut pas être publiée sur le Mac App Store.
+- Without root privileges, macOS refuses detailed statistics (CPU, I/O) for other users' processes: they show as "—".
+- On some chips, CPU and ANE power is not reported to unprivileged processes; the app says so instead of showing 0 W.
+- Frequencies are derived from the power manager's DVFS tables, whose layout changes between SoC generations; they may be approximate.
+- IOReport, the HID sensors and `responsibility_get_pid_responsible_for_pid` are undocumented system interfaces (the same ones `powermetrics` and Activity Monitor use): the app cannot be published on the Mac App Store.
 
 ## Licence
 
-GPL-3.0-or-later, comme Resources. Voir [LICENSE](LICENSE).
+GPL-3.0-or-later, like Resources. See [LICENSE](LICENSE).
 
-Resources est © nokyan et ses contributeurs, distribué sous GPL-3.0-or-later.
+Resources is © nokyan and contributors, distributed under GPL-3.0-or-later.
 
-## Développement
+## Development
 
-iRessources a été développé avec l'aide de [Claude Code](https://claude.com/claude-code), l'assistant de programmation d'Anthropic : écriture du code Swift, exploration des interfaces système de macOS, mesures de performance et mise au point de l'interface.
+iRessources was developed with the help of [Claude Code](https://claude.com/claude-code), Anthropic's coding assistant: writing the Swift code, exploring macOS system interfaces, measuring performance and polishing the interface.
