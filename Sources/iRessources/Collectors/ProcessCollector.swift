@@ -230,6 +230,14 @@ final class ProcessCollector {
         }
     }
 
+    /// True when the process is suspended (SIGSTOP).
+    static func isStopped(_ pid: pid_t) -> Bool {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return false }
+        return info.pbi_status == SSTOP
+    }
+
     /// Sends a signal; returns an error message on failure.
     @discardableResult
     static func send(_ signal: Signal, to pid: pid_t) -> String? {

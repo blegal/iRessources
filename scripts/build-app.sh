@@ -21,6 +21,12 @@ cp "$BIN_DIR/iRessources" "$APP/Contents/MacOS/iRessources"
 cp Support/Info.plist "$APP/Contents/Info.plist"
 strip -x "$APP/Contents/MacOS/iRessources"
 
+# The icon is drawn by the app itself (AppIcon.swift), so it has a single source.
+ICONSET=$(mktemp -d)/AppIcon.iconset
+"$APP/Contents/MacOS/iRessources" --write-iconset "$ICONSET"
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+rm -rf "$(dirname "$ICONSET")"
+
 # Ad-hoc signature so the app launches locally; use your Developer ID to distribute it.
 codesign --force --sign - --options runtime "$APP"
 

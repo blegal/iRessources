@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage(Preferences.smoothGraphs) private var smoothGraphs = false
     @AppStorage(Preferences.normalizeCPU) private var normalizeCPU = true
     @AppStorage(Preferences.sidebarGraphs) private var sidebarGraphs = true
+    @AppStorage(Preferences.appIcon) private var appIcon = AppIconStyle.pulse
 
     private let intervals: [(String, TimeInterval)] = [
         ("Very fast (0.5 s)", 0.5), ("Fast (1 s)", 1), ("Normal (2 s)", 2), ("Slow (3 s)", 3), ("Very slow (5 s)", 5),
@@ -52,6 +53,31 @@ struct SettingsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Toggle("Show graphs in the sidebar", isOn: $sidebarGraphs)
+            }
+            Section("App icon") {
+                HStack(spacing: 14) {
+                    ForEach(AppIconStyle.allCases) { style in
+                        Button {
+                            appIcon = style
+                        } label: {
+                            VStack(spacing: 4) {
+                                AppIconView(style: style)
+                                    .frame(width: 56, height: 56)
+                                    .padding(4)
+                                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .strokeBorder(appIcon == style ? Color.accentColor : .clear, lineWidth: 2))
+                                Text(style.name).font(.callout)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(appIcon == style ? .isSelected : [])
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .onChange(of: appIcon) { _, style in style.apply() }
+                Text("Pulse is the icon in Finder. The others replace it in the Dock while iRessources is running.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Toggle("Animations", isOn: $animations)

@@ -1,4 +1,4 @@
-# iRessources
+# <img src="docs/icon.png" width="64" align="center" alt=""> iRessources
 
 **English** · [Français](README.fr.md)
 
@@ -44,13 +44,15 @@ What was **added or adapted**:
 
 Select an app to open a drawer under the list: where it lives on disk, what it uses right now, a **priority (*nice*) slider** applied to all its processes, and a **background mode** that keeps it on the most power-efficient cores and throttles its disk and network access. Handy for a long build or an export you don't want slowing everything else down.
 
+The **Pause** button (orange) in the action bar suspends every process of the selected apps: they stop using the processor until you click **Resume** (green). A paused app shows ⏸ next to its name. Useful to free the machine for a moment without losing an app's state.
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apps-dark.png"><img alt="Apps page with the details drawer of Safari: path, usage, priority slider and background mode" src="docs/screenshots/apps-light.png"></picture>
 
 ## Features
 
 | Page | Contents |
 | --- | --- |
-| **Apps** | Open applications with all their processes (XPC helpers included, through the "responsible process" as in Activity Monitor). Memory, processor, disk read/write, GPU. Quit, force quit, hide. |
+| **Apps** | Open applications with all their processes (XPC helpers included, through the "responsible process" as in Activity Monitor). Memory, processor, disk read/write, GPU. Quit, force quit, hide, pause and resume; priority and background mode. |
 | **Processes** | Every process: PID, user, memory (physical footprint), processor, threads, disk I/O, per-process GPU. End, kill, suspend, resume; details panel (command line, parent, CPU time…). |
 | **Processor** | Total and per logical core usage, core type (Super/Performance/Efficiency), frequency and activity per cluster, power (when exposed), cache, load, SoC temperature, thermal state. |
 | **Memory** | Used / total, swap, breakdown (apps, wired, compressed, cache), memory pressure. |
@@ -69,6 +71,10 @@ While the window is hidden, the app refreshes at most every 5 s and turns off th
 | Adwaita | Dracula | Nord |
 | --- | --- | --- |
 | <img alt="Adwaita theme" src="docs/screenshots/theme-adwaita.png"> | <img alt="Dracula theme" src="docs/screenshots/theme-dracula.png"> | <img alt="Nord theme" src="docs/screenshots/theme-nord.png"> |
+
+The app icon can be chosen too: **Pulse** (default), **Gauge**, **Chip** or **Bars**, inspired by Activity Monitor, GNOME System Monitor, Mission Center and Task Manager. Pulse stays the icon in Finder; the others replace it in the Dock while iRessources runs.
+
+<img alt="The four app icons: Pulse, Gauge, Chip and Bars" src="docs/app-icons.png" width="512">
 
 Two levels of animation, each of which can be turned off:
 

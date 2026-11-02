@@ -19,6 +19,18 @@ struct IRessourcesApp: App {
             Diagnostics.dump()
             exit(0)
         }
+        if let index = CommandLine.arguments.firstIndex(of: "--write-iconset"),
+           let path = CommandLine.arguments[safe: index + 1] {
+            MainActor.assumeIsolated {
+                do {
+                    try AppIconStyle.writeIconset(to: URL(fileURLWithPath: path))
+                    exit(0)
+                } catch {
+                    FileHandle.standardError.write(Data("\(error)\n".utf8))
+                    exit(1)
+                }
+            }
+        }
     }
 
     var body: some Scene {
@@ -52,6 +64,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Needed when launched from `swift run` rather than from a bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        let icon = UserDefaults.standard.string(forKey: Preferences.appIcon).flatMap(AppIconStyle.init) ?? .pulse
+        if icon != .pulse { icon.apply() }
     }
 }
 

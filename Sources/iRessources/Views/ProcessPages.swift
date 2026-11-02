@@ -296,6 +296,11 @@ struct AppsPage: View {
                 HStack(spacing: 10) {
                     ProcessIcon(executablePath: nil, bundlePath: app.bundlePath, size: 28)
                     Text(app.name).lineLimit(1)
+                    if ProcessCollector.isStopped(app.pid) {
+                        Image(systemName: "pause.circle.fill")
+                            .foregroundStyle(theme.warning)
+                            .help("Paused")
+                    }
                 }
                 .padding(.vertical, 3)
             }
@@ -364,8 +369,22 @@ struct AppsPage: View {
         }
     }
 
+    private var selectedApps: [AppSample] {
+        monitor.apps.filter { selection.contains($0.pid) }
+    }
+
     private var actionBar: some View {
-        ActionBar {
+        let apps = selectedApps
+        let paused = !apps.isEmpty && apps.allSatisfy { ProcessCollector.isStopped($0.pid) }
+        return ActionBar {
+            Button(paused ? "Resume" : "Pause", systemImage: paused ? "play.fill" : "pause.fill") {
+                setPaused(!paused, apps)
+            }
+            .buttonStyle(PillStyle(tint: paused ? theme.success : theme.warning))
+            // Suspending iRessources itself would leave nothing to resume it with.
+            .disabled(apps.isEmpty || selection.contains(getpid()))
+            .help(paused ? "Resume every process of the app" : "Suspend every process of the app until resumed")
+
             SplitDestructiveButton(title: "End App", enabled: !selection.isEmpty) {
                 quit(Array(selection))
             } menu: {
@@ -377,7 +396,17 @@ struct AppsPage: View {
         }
     }
 
+    private func setPaused(_ paused: Bool, _ apps: [AppSample]) {
+        for pid in apps.flatMap(\.processIDs) {
+            ProcessCollector.send(paused ? .stop : .resume, to: pid)
+        }
+        monitor.refreshNow()
+    }
+
     private func quit(_ pids: [pid_t]) {
+        // A suspended app cannot handle the quit request until it is resumed.
+        let apps = monitor.apps.filter { pids.contains($0.pid) && ProcessCollector.isStopped($0.pid) }
+        if !apps.isEmpty { setPaused(false, apps) }
         pids.forEach { NSRunningApplication(processIdentifier: $0)?.terminate() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { monitor.refreshNow() }
     }
@@ -413,7 +442,7 @@ private struct SplitDestructiveButton<MenuContent: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             Button(title, action: action)
-                .buttonStyle(DestructivePillStyle())
+                .buttonStyle(PillStyle(tint: theme.danger))
             Menu {
                 menu
             } label: {

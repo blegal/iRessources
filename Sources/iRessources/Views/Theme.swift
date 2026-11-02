@@ -19,6 +19,8 @@ struct Theme: Identifiable, Equatable {
     var battery: Color
     var power: Color
     var danger: Color = Color(hex: 0xE01B24)
+    var warning: Color = Color(hex: 0xE66100)
+    var success: Color = Color(hex: 0x26A269)
     var windowBackground: Color?
     var sidebarBackground: Color?
     var cardBackground: Color?
@@ -132,6 +134,7 @@ enum Preferences {
     static let smoothGraphs = "smoothGraphs"
     static let sidebarGraphs = "sidebarGraphs"
     static let normalizeCPU = "normalizeCPU"
+    static let appIcon = "appIcon"
 }
 
 /// Animation helper honouring both the in-app switch and the system's Reduce Motion.

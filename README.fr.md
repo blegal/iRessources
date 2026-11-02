@@ -1,4 +1,4 @@
-# iRessources
+# <img src="docs/icon.png" width="64" align="center" alt=""> iRessources
 
 [English](README.md) · **Français**
 
@@ -44,13 +44,15 @@ Ce qui a été **ajouté ou adapté** :
 
 Sélectionnez une app pour ouvrir un tiroir sous la liste : son emplacement sur le disque, ce qu'elle consomme en ce moment, un **curseur de priorité (*nice*)** appliqué à tous ses processus et un **mode arrière-plan** qui la cantonne aux cœurs les plus économes et ralentit ses accès disque et réseau. Pratique pour une longue compilation ou un export qui ne doit pas ralentir tout le reste.
 
+Le bouton **Pause** (orange) de la barre d'action suspend tous les processus des apps sélectionnées : elles n'utilisent plus le processeur jusqu'à ce que vous cliquiez sur **Resume** (vert). Une app en pause affiche ⏸ à côté de son nom. Pratique pour libérer la machine un moment sans perdre l'état d'une app.
+
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/apps-dark.png"><img alt="Page Apps avec le tiroir de détails de Safari : chemin, consommation, curseur de priorité et mode arrière-plan" src="docs/screenshots/apps-light.png"></picture>
 
 ## Fonctionnalités
 
 | Page | Contenu |
 | --- | --- |
-| **Apps** | Applications ouvertes, regroupant tous leurs processus (y compris les helpers XPC, via le « processus responsable » comme dans le Moniteur d'activité). Mémoire, processeur, lecture/écriture disque, GPU. Quitter, forcer à quitter, masquer. |
+| **Apps** | Applications ouvertes, regroupant tous leurs processus (y compris les helpers XPC, via le « processus responsable » comme dans le Moniteur d'activité). Mémoire, processeur, lecture/écriture disque, GPU. Quitter, forcer à quitter, masquer, mettre en pause et reprendre ; priorité et mode arrière-plan. |
 | **Processes** | Tous les processus : PID, utilisateur, mémoire (empreinte physique), processeur, threads, E/S disque, GPU par processus. Terminer, tuer, suspendre, reprendre ; panneau de détails (ligne de commande, parent, temps CPU…). |
 | **Processor** | Usage total et par cœur logique, type de cœur (Super/Performance/Efficacité), fréquence et activité par cluster, puissance (si exposée), cache, charge, température SoC, état thermique. |
 | **Memory** | Utilisée / totale, swap, répartition (apps, câblée, compressée, cache), pression mémoire. |
@@ -69,6 +71,10 @@ Quand la fenêtre est masquée, l'app rafraîchit au plus toutes les 5 s et coup
 | Adwaita | Dracula | Nord |
 | --- | --- | --- |
 | <img alt="Thème Adwaita" src="docs/screenshots/theme-adwaita.png"> | <img alt="Thème Dracula" src="docs/screenshots/theme-dracula.png"> | <img alt="Thème Nord" src="docs/screenshots/theme-nord.png"> |
+
+L'icône de l'app se choisit aussi : **Pulse** (par défaut), **Gauge**, **Chip** ou **Bars**, inspirées du Moniteur d'activité, du Moniteur système de GNOME, de Mission Center et du Gestionnaire des tâches. Pulse reste l'icône dans le Finder ; les autres la remplacent dans le Dock tant qu'iRessources tourne.
+
+<img alt="Les quatre icônes : Pulse, Gauge, Chip et Bars" src="docs/app-icons.png" width="512">
 
 Deux niveaux d'animation, désactivables indépendamment :
 

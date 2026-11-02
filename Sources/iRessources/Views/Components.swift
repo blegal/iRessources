@@ -298,18 +298,18 @@ struct UsageBar: View {
 
 // MARK: - Buttons
 
-/// Destructive pill button, like libadwaita's "End App".
-struct DestructivePillStyle: ButtonStyle {
-    @Environment(\.theme) private var theme
+/// Tinted pill button, like libadwaita's destructive "End App".
+struct PillStyle: ButtonStyle {
+    var tint: Color
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body.weight(.semibold))
-            .foregroundStyle(theme.danger.opacity(isEnabled ? 1 : 0.45))
+            .foregroundStyle(tint.opacity(isEnabled ? 1 : 0.45))
             .padding(.horizontal, 14)
             .padding(.vertical, 6)
-            .background(theme.danger.opacity(configuration.isPressed ? 0.28 : 0.16),
+            .background(tint.opacity(configuration.isPressed ? 0.28 : 0.16),
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
