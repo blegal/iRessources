@@ -1,0 +1,100 @@
+# Builds a universal iRessources.app and packs it in a disk image.
+# - On demand: the image is an artifact of the run (kept 30 days).
+# - On a v* tag (for example v0.1.0): the image is published in a GitHub release, which the
+#   blegal/homebrew-tap cask follows.
+#
+# Signing is ad hoc unless the MACOS_CERTIFICATE_P12 (base64 .p12) and
+# MACOS_CERTIFICATE_PASSWORD secrets exist.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            BASE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Support/Info.plist)
+            VERSION="$BASE-dev.$GITHUB_RUN_NUMBER"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Signing certificate (optional)
+        id: cert
+        env:
+          P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [[ -z "$P12" ]]; then
+            echo "No certificate: ad-hoc signature."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+          # A self-signed certificate is not "valid" to the system, so use its SHA-1 fingerprint.
+          IDENTITY=$(security find-identity -p codesigning "$KEYCHAIN" | awk '/\)/ {print $2; exit}')
+          [[ -n "$IDENTITY" ]] || { echo "No signing identity in the certificate" >&2; exit 1; }
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - name: Build (universal)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+        run: scripts/build-app.sh --universal
+
+      - name: Disk image
+        id: dmg
+        env:
+          SIGN_IDENTITY: ${{ steps.cert.outputs.identity }}
+        run: |
+          DMG=$(scripts/make-dmg.sh)
+          codesign --verify --deep --strict --verbose=2 build/iRessources.app
+          lipo -info build/iRessources.app/Contents/MacOS/iRessources
+          echo "path=$DMG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iRessources-${{ steps.version.outputs.version }}
+          path: ${{ steps.dmg.outputs.path }}
+          retention-days: 30
+
+      - name: GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A re-pushed tag must not replace a release that is already out.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists: nothing to publish."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" "${{ steps.dmg.outputs.path }}" \
+            --title "iRessources ${{ steps.version.outputs.version }}" \
+            --notes "Not notarized: on first launch, right-click the app › Open, or run \`xattr -dr com.apple.quarantine /Applications/iRessources.app\`. Requires macOS 15 or later."
+
+      - name: Remove the keychain
+        if: always() && steps.cert.outputs.identity != '-' && steps.cert.outputs.identity != ''
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true

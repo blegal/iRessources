@@ -102,12 +102,21 @@ What matters:
 - No `MTLDevice`: creating one reserves more than 100 MB of GPU memory.
 - Graphs are drawn with `Shape`s (no view per point), with history limited to 60 samples.
 
+## Installation
+
+Download `iRessources-X.Y.Z.dmg` from the [latest release](https://github.com/blegal/iRessources/releases/latest) and drag the app into Applications. It requires macOS 15 or later.
+
+Or with Homebrew: `brew install --cask blegal/tap/iressources`
+
+The app is not notarized: on first launch, right-click it › Open, or run `xattr -dr com.apple.quarantine /Applications/iRessources.app`.
+
 ## Building
 
 Requires Xcode 16 or later and macOS 15+.
 
 ```sh
 scripts/build-app.sh          # builds build/iRessources.app (ad hoc signature)
+scripts/make-dmg.sh           # packs it into build/iRessources-<version>.dmg
 open build/iRessources.app
 ```
 
