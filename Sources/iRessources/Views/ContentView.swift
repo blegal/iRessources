@@ -167,7 +167,7 @@ struct Sidebar: View {
                     }
                 }
                 ForEach(monitor.drives) { drive in
-                    item(.drive(drive.id), driveTitle(drive), drive.kind == "Disk image" ? "opticaldiscdrive" : "internaldrive",
+                    item(.drive(drive.id), driveTitle(drive), drive.kind == "Disk image" ? "opticaldiscdrive" : drive.isInternal ? "internaldrive" : "externaldrive",
                          value: Format.percent(drive.activeRatio)) {
                         GraphView(monitor.driveActiveHistories[drive.id]?.values ?? [], color: theme.drive)
                     }
@@ -236,9 +236,9 @@ struct Sidebar: View {
         .animation(motion.animation(.spring(response: 0.3, dampingFraction: 0.85)), value: isSelected)
     }
 
+    /// Drives of the same size and kind would share a title, so name them after their volumes.
     private func driveTitle(_ drive: DriveSample) -> String {
-        if drive.kind == "Disk image" { return drive.volumes.first?.name ?? drive.model }
-        return "\(Format.storage(drive.capacity)) \(drive.kind == "SSD" ? "SSD" : "Drive")"
+        drive.volumes.first?.name ?? drive.model
     }
 
     private func batterySymbol(_ battery: BatterySample) -> String {

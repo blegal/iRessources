@@ -62,12 +62,15 @@ final class DriveCollector {
                          (props["Removable"] as? Bool) ?? false)
             }
             guard let media, media.size > 0 else { return }
+            let driveVolumes = volumes[id] ?? []
 
             let device = IORegistry.searchProperty("Device Characteristics", of: driver) as? [String: Any] ?? [:]
             let proto = IORegistry.searchProperty("Protocol Characteristics", of: driver) as? [String: Any] ?? [:]
             let interconnect = proto["Physical Interconnect"] as? String
             let location = proto["Physical Interconnect Location"] as? String
             let isImage = interconnect == "Virtual Interface" || location == "File"
+            // A disk image is only worth showing while one of its volumes is visible in Finder.
+            if isImage && driveVolumes.isEmpty { return }
 
             let current = Counters(
                 read: stat("Bytes (Read)"),
@@ -87,7 +90,7 @@ final class DriveCollector {
                 capacity: media.size,
                 totalRead: current.read,
                 totalWritten: current.written,
-                volumes: volumes[id] ?? []
+                volumes: driveVolumes
             )
             if let before = previous[id] {
                 drive.readBytesPerSecond = Double(current.read &- before.read) / elapsed
@@ -129,6 +132,8 @@ final class DriveCollector {
             guard from.hasPrefix("/dev/disk") else { continue }
             // Skip the read-only system internals that only add noise.
             if on.hasPrefix("/System/Volumes/") && on != "/System/Volumes/Data" { continue }
+            // Volumes hidden from Finder (Recovery, images an updater mounted in a temporary folder…).
+            if fs.f_flags & UInt32(MNT_DONTBROWSE) != 0 && on != "/System/Volumes/Data" { continue }
 
             let bsd = String(from.dropFirst("/dev/".count))
             guard let driveID = backingDriverID(forBSDName: bsd) else { continue }
