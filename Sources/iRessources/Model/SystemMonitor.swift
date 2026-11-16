@@ -102,6 +102,9 @@ final class SystemMonitor {
 
     private(set) var processes: [ProcessSample] = []
     private(set) var apps: [AppSample] = []
+    /// The same samples by PID, for the table cells that read their live values.
+    private(set) var processesByPID: [pid_t: ProcessSample] = [:]
+    private(set) var appsByPID: [pid_t: AppSample] = [:]
     private(set) var lastUpdate = Date()
 
     var refreshInterval: TimeInterval {
@@ -140,7 +143,7 @@ final class SystemMonitor {
         if isVisible { sampler.fire() }
     }
 
-    func process(_ pid: pid_t) -> ProcessSample? { processes.first { $0.pid == pid } }
+    func process(_ pid: pid_t) -> ProcessSample? { processesByPID[pid] }
 
     func refreshNow() { sampler.fire() }
 
@@ -204,10 +207,14 @@ final class SystemMonitor {
         if let snapshotProcesses = snapshot.processes {
             processes = snapshotProcesses
             apps = groupApplications(snapshotProcesses)
+            processesByPID = Dictionary(processes.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
+            appsByPID = Dictionary(apps.map { ($0.pid, $0) }, uniquingKeysWith: { first, _ in first })
         } else if !processes.isEmpty {
             // Release the process list while nobody looks at it.
             processes = []
             apps = []
+            processesByPID = [:]
+            appsByPID = [:]
         }
     }
 

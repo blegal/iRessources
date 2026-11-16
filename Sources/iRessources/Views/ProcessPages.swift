@@ -5,12 +5,12 @@ import SwiftUI
 
 /// Shared CPU formatting: either a share of the whole machine or of one core.
 private struct CPUText: View {
-    @Environment(SystemMonitor.self) private var monitor
     @AppStorage("normalizeCPU") private var normalize = true
     var cores: Double
+    var logicalCores: Int
 
     var body: some View {
-        let value = normalize ? cores / Double(max(monitor.cpuInfo.logicalCores, 1)) : cores
+        let value = normalize ? cores / Double(max(logicalCores, 1)) : cores
         Text(Format.percent(value, decimals: 1))
             .monospacedDigit()
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -25,12 +25,77 @@ private struct TrailingText: View {
     }
 }
 
+// MARK: - Stable rows
+
+/// A table row that stays equal from one refresh to the next while it shows the
+/// same process. Under a window toolbar, each update of a SwiftUI `Table` re-adds
+/// its header views and AppKit keeps a few dependency records for every one of
+/// them until the table goes away (macOS 27), so updating the tables on each
+/// refresh made memory climb by megabytes an hour. The cells read their live
+/// values from the monitor instead, and the tables only update when rows appear,
+/// disappear or move.
+struct StableRow<Sample: Identifiable>: Identifiable, Equatable where Sample.ID == pid_t {
+    var sample: Sample
+    private var name: String
+    var id: pid_t { sample.id }
+
+    init(_ sample: Sample, name: String) {
+        self.sample = sample
+        self.name = name
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id && lhs.name == rhs.name }
+}
+
+/// Keeps a table's order for a few seconds, since every reorder updates the
+/// table (see `StableRow`) and the values sorted on change at each refresh.
+/// Rows that appear meanwhile go at the end until the next sort.
+@MainActor
+final class SortThrottle {
+    static let interval: TimeInterval = 5
+    private var order: [pid_t] = []
+    private var key: [AnyHashable] = []
+    private var date = Date.distantPast
+
+    func apply<Sample>(_ rows: [StableRow<Sample>], key: [AnyHashable],
+                       sort: ([StableRow<Sample>]) -> [StableRow<Sample>]) -> [StableRow<Sample>] {
+        let now = Date()
+        guard key == self.key, now.timeIntervalSince(date) < Self.interval else {
+            let sorted = sort(rows)
+            order = sorted.map(\.id)
+            self.key = key
+            date = now
+            return sorted
+        }
+        var remaining = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var result = order.compactMap { remaining.removeValue(forKey: $0) }
+        if !remaining.isEmpty {
+            result += sort(rows.filter { remaining[$0.id] != nil })
+            order = result.map(\.id)
+        }
+        return result
+    }
+}
+
+/// A cell showing the latest sample of its row's process. The monitor is passed
+/// in: SwiftUI also renders table cells outside the page's environment.
+private struct LiveCell<Sample: Identifiable, Content: View>: View where Sample.ID == pid_t {
+    var monitor: SystemMonitor
+    var row: StableRow<Sample>
+    var index: KeyPath<SystemMonitor, [pid_t: Sample]>
+    @ViewBuilder var content: (Sample) -> Content
+
+    var body: some View { content(monitor[keyPath: index][row.id] ?? row.sample) }
+}
+
 // MARK: - Processes
 
 struct ProcessesPage: View {
     @Environment(SystemMonitor.self) private var monitor
     @Environment(\.theme) private var theme
-    @State private var sortOrder = [KeyPathComparator(\ProcessSample.cpu, order: .reverse)]
+    typealias Row = StableRow<ProcessSample>
+    @State private var sortOrder = [KeyPathComparator(\Row.sample.cpu, order: .reverse)]
+    @State private var sortThrottle = SortThrottle()
     @State private var selection = Set<pid_t>()
     @State private var search = ""
     @State private var showInspector = false
@@ -48,47 +113,62 @@ struct ProcessesPage: View {
         var pids: [pid_t]
     }
 
-    private var rows: [ProcessSample] {
+    private var rows: [Row] {
         let uid = getuid()
-        return monitor.processes
+        let rows = monitor.processes
             .filter { scope == .all || $0.uid == uid }
             .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || "\($0.pid)" == search }
-            .sorted(using: sortOrder)
+            .map { Row($0, name: $0.name) }
+        return sortThrottle.apply(rows, key: [sortOrder, search, scope]) { $0.sorted(using: sortOrder) }
+    }
+
+    private func live(_ row: Row, @ViewBuilder _ content: @escaping (ProcessSample) -> some View) -> some View {
+        LiveCell(monitor: monitor, row: row, index: \.processesByPID, content: content)
     }
 
     var body: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("Name", value: \.name) { process in
-                HStack(spacing: 8) {
-                    ProcessIcon(executablePath: process.executablePath, size: 18)
-                    Text(process.name).lineLimit(1)
-                    if process.state == .stopped {
-                        Image(systemName: "pause.circle").foregroundStyle(.secondary).help("Suspended")
+            TableColumn("Name", value: \.sample.name) { row in
+                live(row) { process in
+                    HStack(spacing: 8) {
+                        ProcessIcon(executablePath: process.executablePath, size: 18)
+                        Text(process.name).lineLimit(1)
+                        if process.state == .stopped {
+                            Image(systemName: "pause.circle").foregroundStyle(.secondary).help("Suspended")
+                        }
                     }
                 }
             }
             .width(min: 180, ideal: 240)
-            TableColumn("Process ID", value: \.pid) { TrailingText("\($0.pid)") }
+            TableColumn("Process ID", value: \.sample.pid) { TrailingText("\($0.id)") }
                 .width(min: 50, ideal: 60)
-            TableColumn("User", value: \.user) { Text($0.user).lineLimit(1) }
+            TableColumn("User", value: \.sample.user) { Text($0.sample.user).lineLimit(1) }
                 .width(min: 60, ideal: 90)
-            TableColumn("Memory", value: \.memory) { process in
-                TrailingText(process.isAccessible || process.memory > 0 ? Format.bytes(process.memory) : "—")
+            TableColumn("Memory", value: \.sample.memory) { row in
+                live(row) { TrailingText($0.isAccessible || $0.memory > 0 ? Format.bytes($0.memory) : "—") }
             }
             .width(min: 70, ideal: 90)
-            TableColumn("Processor", value: \.cpu) { process in
-                if process.isAccessible { CPUText(cores: process.cpu) } else { TrailingText("—") }
+            TableColumn("Processor", value: \.sample.cpu) { row in
+                live(row) { process in
+                    if process.isAccessible { CPUText(cores: process.cpu, logicalCores: monitor.cpuInfo.logicalCores) } else { TrailingText("—") }
+                }
             }
             .width(min: 60, ideal: 70)
-            TableColumn("Threads", value: \.threads) { process in
-                TrailingText(process.threads > 0 ? "\(process.threads)" : "—")
+            TableColumn("Threads", value: \.sample.threads) { row in
+                live(row) { TrailingText($0.threads > 0 ? "\($0.threads)" : "—") }
             }
             .width(min: 50, ideal: 60)
-            TableColumn("Read", value: \.diskReadPerSecond) { TrailingText(Format.rate($0.diskReadPerSecond)) }
-                .width(min: 70, ideal: 80)
-            TableColumn("Write", value: \.diskWritePerSecond) { TrailingText(Format.rate($0.diskWritePerSecond)) }
-                .width(min: 70, ideal: 80)
-            TableColumn("GPU", value: \.gpu) { TrailingText(Format.percent($0.gpu, decimals: 1)) }
+            TableColumn("Read", value: \.sample.diskReadPerSecond) { row in
+                live(row) { TrailingText(Format.rate($0.diskReadPerSecond)) }
+            }
+            .width(min: 70, ideal: 80)
+            TableColumn("Write", value: \.sample.diskWritePerSecond) { row in
+                live(row) { TrailingText(Format.rate($0.diskWritePerSecond)) }
+            }
+            .width(min: 70, ideal: 80)
+            TableColumn("GPU", value: \.sample.gpu) { row in
+                live(row) { TrailingText(Format.percent($0.gpu, decimals: 1)) }
+            }
                 .width(min: 50, ideal: 60)
         }
         .contextMenu(forSelectionType: pid_t.self) { pids in
@@ -250,7 +330,9 @@ struct AppsPage: View {
     @Environment(SystemMonitor.self) private var monitor
     @Environment(\.theme) private var theme
     @Environment(\.motion) private var motion
-    @State private var sortOrder: [KeyPathComparator<AppSample>]
+    typealias Row = StableRow<AppSample>
+    @State private var sortOrder: [KeyPathComparator<Row>]
+    @State private var sortThrottle = SortThrottle()
     @State private var selection = Set<pid_t>()
     @State private var search = ""
     @State private var confirmForceQuit: [pid_t]?
@@ -263,59 +345,66 @@ struct AppsPage: View {
                                                           order: ascending ? .forward : .reverse)])
     }
 
-    private static let columns: [(String, PartialKeyPath<AppSample>)] = [
-        ("name", \.name), ("memory", \.memory), ("cpu", \.cpu), ("read", \.diskReadPerSecond),
-        ("write", \.diskWritePerSecond), ("gpu", \.gpu),
+    private static let columns: [(String, PartialKeyPath<Row>)] = [
+        ("name", \.sample.name), ("memory", \.sample.memory), ("cpu", \.sample.cpu), ("read", \.sample.diskReadPerSecond),
+        ("write", \.sample.diskWritePerSecond), ("gpu", \.sample.gpu),
     ]
 
-    private static func comparator(_ column: String, order: SortOrder) -> KeyPathComparator<AppSample> {
+    private static func comparator(_ column: String, order: SortOrder) -> KeyPathComparator<Row> {
         switch column {
-        case "memory": KeyPathComparator(\.memory, order: order)
-        case "cpu": KeyPathComparator(\.cpu, order: order)
-        case "read": KeyPathComparator(\.diskReadPerSecond, order: order)
-        case "write": KeyPathComparator(\.diskWritePerSecond, order: order)
-        case "gpu": KeyPathComparator(\.gpu, order: order)
-        default: KeyPathComparator(\.name, comparator: .localizedStandard, order: order)
+        case "memory": KeyPathComparator(\.sample.memory, order: order)
+        case "cpu": KeyPathComparator(\.sample.cpu, order: order)
+        case "read": KeyPathComparator(\.sample.diskReadPerSecond, order: order)
+        case "write": KeyPathComparator(\.sample.diskWritePerSecond, order: order)
+        case "gpu": KeyPathComparator(\.sample.gpu, order: order)
+        default: KeyPathComparator(\.sample.name, comparator: .localizedStandard, order: order)
         }
     }
 
     private var selectedApp: AppSample? {
         guard selection.count == 1, let pid = selection.first else { return nil }
-        return monitor.apps.first { $0.pid == pid }
+        return monitor.appsByPID[pid]
     }
 
-    private var rows: [AppSample] {
-        monitor.apps
+    private var rows: [Row] {
+        let rows = monitor.apps
             .filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
-            .sorted(using: sortOrder)
+            .map { Row($0, name: $0.name) }
+        return sortThrottle.apply(rows, key: [sortOrder, search]) { $0.sorted(using: sortOrder) }
+    }
+
+    private func live(_ row: Row, @ViewBuilder _ content: @escaping (AppSample) -> some View) -> some View {
+        LiveCell(monitor: monitor, row: row, index: \.appsByPID, content: content)
     }
 
     var body: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("App", value: \.name, comparator: .localizedStandard) { app in
-                HStack(spacing: 10) {
-                    ProcessIcon(executablePath: nil, bundlePath: app.bundlePath, size: 28)
-                    Text(app.name).lineLimit(1)
-                    if ProcessCollector.isStopped(app.pid) {
-                        Image(systemName: "pause.circle.fill")
-                            .foregroundStyle(theme.warning)
-                            .help("Paused")
+            TableColumn("App", value: \.sample.name, comparator: .localizedStandard) { row in
+                live(row) { app in
+                    HStack(spacing: 10) {
+                        ProcessIcon(executablePath: nil, bundlePath: app.bundlePath, size: 28)
+                        Text(app.name).lineLimit(1)
+                        if ProcessCollector.isStopped(app.pid) {
+                            Image(systemName: "pause.circle.fill")
+                                .foregroundStyle(theme.warning)
+                                .help("Paused")
+                        }
                     }
+                    .padding(.vertical, 3)
                 }
-                .padding(.vertical, 3)
             }
             .width(min: 160, ideal: 220)
-            TableColumn("Memory", value: \.memory) { TrailingText(Format.bytes($0.memory)) }
+            TableColumn("Memory", value: \.sample.memory) { row in live(row) { TrailingText(Format.bytes($0.memory)) } }
                 .width(min: 70, ideal: 90)
-            TableColumn("Processor", value: \.cpu) { CPUText(cores: $0.cpu) }
+            TableColumn("Processor", value: \.sample.cpu) { row in live(row) { CPUText(cores: $0.cpu, logicalCores: monitor.cpuInfo.logicalCores) } }
                 .width(min: 60, ideal: 70)
-            TableColumn("Read", value: \.diskReadPerSecond) { TrailingText(Format.rate($0.diskReadPerSecond)) }
+            TableColumn("Read", value: \.sample.diskReadPerSecond) { row in live(row) { TrailingText(Format.rate($0.diskReadPerSecond)) } }
                 .width(min: 70, ideal: 80)
-            TableColumn("Write", value: \.diskWritePerSecond) { TrailingText(Format.rate($0.diskWritePerSecond)) }
+            TableColumn("Write", value: \.sample.diskWritePerSecond) { row in live(row) { TrailingText(Format.rate($0.diskWritePerSecond)) } }
                 .width(min: 70, ideal: 80)
-            TableColumn("GPU", value: \.gpu) { TrailingText(Format.percent($0.gpu, decimals: 1)) }
+            TableColumn("GPU", value: \.sample.gpu) { row in live(row) { TrailingText(Format.percent($0.gpu, decimals: 1)) } }
                 .width(min: 50, ideal: 60)
-            TableColumn("Processes") { TrailingText("\($0.processIDs.count)") }
+            TableColumn("Processes") { row in live(row) { TrailingText("\($0.processIDs.count)") } }
                 .width(min: 60, ideal: 70)
         }
         .contextMenu(forSelectionType: pid_t.self) { pids in
