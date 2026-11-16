@@ -120,6 +120,8 @@ scripts/make-dmg.sh           # packs it into build/iRessources-<version>.dmg
 open build/iRessources.app
 ```
 
+To keep the permissions macOS granted from one build to the next, run `scripts/make-local-cert.sh` once per Mac: it creates the "Local Code Signing" certificate in your login keychain (iExplorer and the other apps of this author use the same one), which `scripts/build-app.sh` then uses instead of an ad-hoc signature.
+
 For development: `swift run`. To see what the collectors expose on a given machine, without the interface:
 
 ```sh
